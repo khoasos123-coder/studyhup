@@ -1,5 +1,6 @@
 'use client';
 
+import { FloatingMessenger } from '@/components/chat/floating-messenger';
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
 import { signOut } from 'next-auth/react';
@@ -1112,6 +1113,9 @@ export function FocusStudyDashboard({ user: initialUser }: { user: UserProps }) 
         isOpen={isLivePeersOpen}
         onClose={() => setIsLivePeersOpen(false)}
         currentUserId={currentUser.id}
+      /><FloatingMessenger
+        currentUserId={currentUser.id}
+        currentUserName={currentUser.displayName}
       />
 
       {/* ===================== MODAL CÀI ĐẶT HỒ SƠ ===================== */}
