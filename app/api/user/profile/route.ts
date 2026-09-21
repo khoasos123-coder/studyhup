@@ -17,7 +17,6 @@ export async function PATCH(req: NextRequest) {
       data: {
         ...(displayName ? { displayName } : {}),
         avatarUrl: avatarUrl || null,
-        image: avatarUrl || null, // Cập nhật cả image để NextAuth nhận diện
         ...(typeof isStudent === "boolean" ? { isStudent } : {}),
       },
     });

@@ -9,7 +9,6 @@ export default async function FocusPage() {
     redirect("/login");
   }
 
-  // Luôn đọc dữ liệu mới nhất từ Database khi F5
   const dbUser = await prisma.user.findUnique({
     where: { id: session.user.id },
   });
@@ -21,10 +20,10 @@ export default async function FocusPage() {
   const initialUser = {
     id: dbUser.id,
     username: dbUser.username,
-    displayName: dbUser.displayName || dbUser.name || dbUser.username,
-    totalHours: dbUser.totalHours || 0,
+    displayName: dbUser.displayName || dbUser.username,
+    totalHours: Number(dbUser.totalHours) || 0,
     secondsStudiedToday: 0,
-    avatarUrl: dbUser.avatarUrl || dbUser.image || null,
+    avatarUrl: dbUser.avatarUrl || null,
     isStudent: dbUser.isStudent ?? true,
   };
 
