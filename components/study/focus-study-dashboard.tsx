@@ -256,7 +256,7 @@ export function FocusStudyDashboard({ user: initialUser }: { user: UserProps }) 
       const res = await fetch('/api/study-sessions');
       if (res.ok) {
         const data = await res.json();
-        setHistory(data);
+        setHistory(Array.isArray(data) ? data : []);
       }
     } catch (e) {
       console.error('Không tải được lịch sử:', e);
@@ -270,12 +270,42 @@ export function FocusStudyDashboard({ user: initialUser }: { user: UserProps }) 
       const res = await fetch('/api/leaderboard');
       if (res.ok) {
         const data = await res.json();
-        setLeaderboard(data);
+        setLeaderboard(Array.isArray(data) ? data : []);
       }
     } catch (e) {
       console.error('Lỗi tải BXH:', e);
     } finally {
       setIsLoadingLeaderboard(false);
+    }
+  };
+
+  // Hàm xóa 1 phiên
+  const handleDeleteSession = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm("Bạn có chắc chắn muốn xóa phiên học này không?")) return;
+
+    try {
+      const res = await fetch(`/api/study-sessions/delete?id=${id}`, { method: "DELETE" });
+      if (res.ok) {
+        setHistory((prev) => prev.filter((item) => item.id !== id));
+      }
+    } catch (err) {
+      console.error("Lỗi xóa phiên:", err);
+    }
+  };
+
+  // Hàm xóa tất cả phiên
+  const handleClearAllHistory = async () => {
+    if (history.length === 0) return;
+    if (!confirm("Bạn có chắc chắn muốn xóa TOÀN BỘ lịch sử học tập không?")) return;
+
+    try {
+      const res = await fetch("/api/study-sessions/delete?all=true", { method: "DELETE" });
+      if (res.ok) {
+        setHistory([]);
+      }
+    } catch (err) {
+      console.error("Lỗi xóa tất cả lịch sử:", err);
     }
   };
 
@@ -545,11 +575,19 @@ export function FocusStudyDashboard({ user: initialUser }: { user: UserProps }) 
             </nav>
           </div>
 
-          {/* Lịch sử phiên học */}
+          {/* Lịch sử phiên học (Đã có tính năng Xóa 1 phiên khi rê chuột & Xóa tất cả) */}
           <div className="flex-1 overflow-y-auto px-3 space-y-4 text-xs scrollbar-thin scrollbar-thumb-neutral-800">
             <div className="px-1 font-semibold text-[#8390AF] text-[11px] uppercase tracking-wider flex items-center justify-between">
-              <span>Lịch sử học tập</span>
-              <span className="text-[10px]">{history.length} phiên</span>
+              <span>Lịch sử học tập ({history.length})</span>
+              {history.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleClearAllHistory}
+                  className="text-[10px] text-rose-400/80 hover:text-rose-400 hover:underline capitalize transition"
+                >
+                  Xóa tất cả
+                </button>
+              )}
             </div>
 
             {Object.keys(groupedHistory).length === 0 ? (
@@ -564,7 +602,7 @@ export function FocusStudyDashboard({ user: initialUser }: { user: UserProps }) 
                     return (
                       <div
                         key={item.id}
-                        className="group flex items-center justify-between p-2 rounded-xl hover:bg-[#111A2E] text-[#A8B3CF] hover:text-white transition"
+                        className="group flex items-center justify-between p-2 rounded-xl hover:bg-[#111A2E] text-[#A8B3CF] hover:text-white transition relative"
                       >
                         <div className="flex items-center gap-2 truncate">
                           <span className="w-7 h-7 rounded-lg bg-[#111A2E] border border-[#96AFEB]/15 flex items-center justify-center flex-shrink-0">
@@ -572,9 +610,24 @@ export function FocusStudyDashboard({ user: initialUser }: { user: UserProps }) 
                           </span>
                           <span className="truncate font-medium text-xs">{item.subjectTag || 'Học tập'}</span>
                         </div>
-                        <span className="text-[11px] text-[#8390AF] font-mono ml-2 flex-shrink-0">
-                          {durStr} • {timeStr}
-                        </span>
+
+                        <div className="flex items-center gap-1.5 ml-2 flex-shrink-0">
+                          <span className="text-[11px] text-[#8390AF] font-mono group-hover:hidden">
+                            {durStr} • {timeStr}
+                          </span>
+                          <span className="text-[11px] text-[#8390AF] font-mono hidden group-hover:inline">
+                            {durStr}
+                          </span>
+                          {/* Nút xóa 1 dòng (hiển thị khi rê chuột) */}
+                          <button
+                            type="button"
+                            onClick={(e) => handleDeleteSession(item.id, e)}
+                            className="hidden group-hover:flex items-center justify-center w-5 h-5 rounded text-rose-400/80 hover:text-rose-400 hover:bg-rose-500/10 transition"
+                            title="Xóa phiên này"
+                          >
+                            ✕
+                          </button>
+                        </div>
                       </div>
                     );
                   })}
@@ -622,7 +675,6 @@ export function FocusStudyDashboard({ user: initialUser }: { user: UserProps }) 
 
       {/* ===================== KHU VỰC CHÍNH ===================== */}
       <main className="flex-1 flex flex-col h-full overflow-y-auto bg-[#0A0F1C]">
-        {/* Header trên cùng - Nền đen đặc, z-index 40 để che phủ sạch sẽ khi cuộn */}
         <header className="h-16 border-b border-[#96AFEB]/15 px-6 flex items-center justify-between flex-shrink-0 bg-[#0A0F1C] sticky top-0 z-40 shadow-lg">
           <div className="flex items-center gap-3">
             {!isSidebarOpen && (
@@ -670,7 +722,6 @@ export function FocusStudyDashboard({ user: initialUser }: { user: UserProps }) 
         <div className="p-4 md:p-8 max-w-[1360px] w-full mx-auto grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-6">
           {/* CỘT TRÁI: SÂN KHẤU (STAGE) */}
           <section className="relative overflow-hidden bg-[#111A2E] border border-[#96AFEB]/15 rounded-3xl p-6 shadow-2xl flex flex-col gap-5">
-            {/* Lưới nền tinh tế */}
             <div
               className="absolute inset-0 h-80 pointer-events-none opacity-25"
               style={{
@@ -726,7 +777,7 @@ export function FocusStudyDashboard({ user: initialUser }: { user: UserProps }) 
               </div>
             </div>
 
-            {/* ĐỒNG HỒ ĐẾM GIỜ CONDENSED SIÊU LỚN */}
+            {/* ĐỒNG HỒ ĐẾM GIỜ */}
             <div className="relative z-10 text-center py-2">
               <div
                 className="font-mono font-bold tracking-tight text-white leading-none select-none"
@@ -749,7 +800,7 @@ export function FocusStudyDashboard({ user: initialUser }: { user: UserProps }) 
               </p>
             </div>
 
-            {/* Cảnh báo Pomodoro Check-in */}
+            {/* Điểm danh Pomodoro */}
             {session.requiresCheckIn && (
               <div className="relative z-10 w-full p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between">
                 <span className="text-xs text-amber-300 font-medium">🔔 Điểm danh Pomodoro! Xác nhận bạn vẫn đang học.</span>
@@ -762,7 +813,7 @@ export function FocusStudyDashboard({ user: initialUser }: { user: UserProps }) 
               </div>
             )}
 
-            {/* KHUNG GHI HÌNH (FEED) PHONG CÁCH GLASSMORPHISM */}
+            {/* KHUNG GHI HÌNH */}
             <div className="relative z-10 w-full aspect-video max-h-[440px] bg-[#0D1424] border border-[#96AFEB]/20 rounded-2xl overflow-hidden shadow-inner flex items-center justify-center">
               <video
                 ref={media.setVideoElement}
@@ -772,7 +823,6 @@ export function FocusStudyDashboard({ user: initialUser }: { user: UserProps }) 
                 className={`w-full h-full object-cover ${media.isReady ? 'block' : 'hidden'}`}
               />
 
-              {/* Trạng thái tắt nguồn hình ảnh */}
               {!media.isReady && (
                 <div className="p-6 text-center flex flex-col items-center justify-center gap-2">
                   <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white mb-2 shadow">
@@ -797,7 +847,6 @@ export function FocusStudyDashboard({ user: initialUser }: { user: UserProps }) 
                 </div>
               )}
 
-              {/* Overlay khi tạm dừng */}
               {session.status === 'PAUSED' && (
                 <div className="absolute inset-0 bg-[#080C16]/70 backdrop-blur-sm z-20 flex items-center justify-center gap-2 text-sm font-semibold text-amber-300">
                   <SvgIcon name="pause" size={20} />
@@ -805,7 +854,7 @@ export function FocusStudyDashboard({ user: initialUser }: { user: UserProps }) 
                 </div>
               )}
 
-              {/* Nút chọn Nguồn (Glass Segment) ở góc trên bên trái */}
+              {/* Nút chọn Webcam/Màn hình */}
               <div className="absolute left-3 top-3 z-30 flex bg-[#080C17]/70 backdrop-blur-md p-1 rounded-xl border border-white/15">
                 <button
                   type="button"
@@ -855,7 +904,7 @@ export function FocusStudyDashboard({ user: initialUser }: { user: UserProps }) 
               )}
             </div>
 
-            {/* HÀNG NÚT ĐIỀU KHIỂN CHÍNH */}
+            {/* NÚT ĐIỀU KHIỂN */}
             <div className="relative z-10 flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
               {session.status === 'IDLE' && (
                 <button
@@ -925,7 +974,6 @@ export function FocusStudyDashboard({ user: initialUser }: { user: UserProps }) 
 
           {/* CỘT PHẢI (RAIL): BẬC RANK, TRẦN 12H, QUY TẮC */}
           <aside className="space-y-6">
-            {/* THẺ 1: BẬC HIỆN TẠI (LỤC GIÁC & LADDER) */}
             <section className="bg-[#111A2E] border border-[#96AFEB]/15 rounded-3xl p-6 shadow-xl">
               <h2 className="text-xs font-semibold uppercase tracking-wider text-[#8390AF] mb-4">Bậc hiện tại</h2>
               <div className="flex items-center gap-4">
@@ -936,7 +984,6 @@ export function FocusStudyDashboard({ user: initialUser }: { user: UserProps }) 
                 </div>
               </div>
 
-              {/* Thanh tiến độ lên bậc kế */}
               <div className="mt-5 space-y-2">
                 <div className="flex justify-between items-baseline text-xs font-semibold">
                   <span className="text-[#A8B3CF]">
@@ -960,7 +1007,6 @@ export function FocusStudyDashboard({ user: initialUser }: { user: UserProps }) 
                 </p>
               </div>
 
-              {/* Danh sách Thang bậc thu nhỏ (Ladder) */}
               <ol className="flex items-center justify-between mt-5 pt-4 border-t border-[#96AFEB]/15">
                 {TIERS.map((t, idx) => {
                   const currentIdx = TIERS.findIndex((x) => x.id === rankInfo.tier);
@@ -979,7 +1025,7 @@ export function FocusStudyDashboard({ user: initialUser }: { user: UserProps }) 
               </ol>
             </section>
 
-            {/* THẺ 2: TRẦN GIỜ HỌC HÔM NAY (SVG RING) */}
+            {/* TRẦN GIỜ HỌC HÔM NAY */}
             <section className="bg-[#111A2E] border border-[#96AFEB]/15 rounded-3xl p-6 shadow-xl">
               <h2 className="text-xs font-semibold uppercase tracking-wider text-[#8390AF] mb-4">Trần giờ học hôm nay</h2>
               <div className="flex items-center gap-5">
@@ -1018,7 +1064,7 @@ export function FocusStudyDashboard({ user: initialUser }: { user: UserProps }) 
               )}
             </section>
 
-            {/* THẺ 3: CÁCH XÁC THỰC PHIÊN HỌC */}
+            {/* QUY TẮC */}
             <section className="border border-dashed border-[#96AFEB]/25 rounded-3xl p-5">
               <h2 className="text-xs font-semibold uppercase tracking-wider text-[#8390AF] mb-3">Quy tắc tính giờ hợp lệ</h2>
               <ul className="space-y-3 text-xs text-[#A8B3CF]">
@@ -1113,7 +1159,10 @@ export function FocusStudyDashboard({ user: initialUser }: { user: UserProps }) 
         isOpen={isLivePeersOpen}
         onClose={() => setIsLivePeersOpen(false)}
         currentUserId={currentUser.id}
-      /><FloatingMessenger
+      />
+      
+      {/* Bong bóng chat Messenger */}
+      <FloatingMessenger
         currentUserId={currentUser.id}
         currentUserName={currentUser.displayName}
       />
