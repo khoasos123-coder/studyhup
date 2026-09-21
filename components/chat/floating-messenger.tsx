@@ -18,6 +18,7 @@ interface Peer {
   displayName: string | null;
   username: string;
   avatarUrl: string | null;
+  isOnline: boolean;
 }
 
 export function FloatingMessenger({
@@ -28,25 +29,20 @@ export function FloatingMessenger({
   currentUserName: string;
 }) {
   const [isOpen, setIsOpen] = React.useState(false);
-  const [activePeers, setActivePeers] = React.useState<Peer[]>([]);
+  const [peers, setPeers] = React.useState<Peer[]>([]);
   const [selectedPeer, setSelectedPeer] = React.useState<Peer | null>(null);
   const [messages, setMessages] = React.useState<MessageItem[]>([]);
   const [inputText, setInputText] = React.useState("");
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
 
-  // Tải danh sách bạn học đang online
-  const loadOnlinePeers = async () => {
+  // Tải toàn bộ danh sách bạn học (cả online và offline)
+  const loadPeers = async () => {
     try {
-      const res = await fetch("/api/study-sessions/active");
+      const res = await fetch("/api/chat/peers");
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data)) {
-          const list: Peer[] = data
-            .map((item: any) => item?.user)
-            .filter((u: any): u is Peer => Boolean(u && u.id && u.id !== currentUserId));
-
-          const unique = Array.from(new Map(list.map((m) => [m.id, m])).values());
-          setActivePeers(unique);
+          setPeers(data);
         }
       }
     } catch (e) {
@@ -55,10 +51,10 @@ export function FloatingMessenger({
   };
 
   React.useEffect(() => {
-    if (isOpen) loadOnlinePeers();
+    if (isOpen) loadPeers();
   }, [isOpen]);
 
-  // Tải lịch sử chat và lắng nghe tin nhắn mới
+  // Tải lịch sử chat và lắng nghe Realtime khi chọn một bạn học
   React.useEffect(() => {
     if (!selectedPeer?.id) return;
 
@@ -69,7 +65,6 @@ export function FloatingMessenger({
       })
       .catch(() => setMessages([]));
 
-    // Lắng nghe Realtime qua Supabase WebSocket
     const channel = supabase
       .channel(`direct_${selectedPeer.id}`)
       .on(
@@ -100,7 +95,7 @@ export function FloatingMessenger({
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Gửi tin nhắn và hiện lên màn hình NGAY LẬP TỨC
+  // Gửi tin nhắn (gửi được cho cả người online lẫn offline)
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputText.trim() || !selectedPeer?.id) return;
@@ -108,7 +103,6 @@ export function FloatingMessenger({
     const text = inputText.trim();
     setInputText("");
 
-    // 1. Tạo tin nhắn tạm để hiển thị tức thì trên màn hình (không cần chờ mạng)
     const tempId = "temp_" + Date.now();
     const optimisticMsg: MessageItem = {
       id: tempId,
@@ -122,7 +116,6 @@ export function FloatingMessenger({
 
     setMessages((prev) => [...(Array.isArray(prev) ? prev : []), optimisticMsg]);
 
-    // 2. Gửi dữ liệu về máy chủ
     try {
       const res = await fetch("/api/messages", {
         method: "POST",
@@ -135,30 +128,27 @@ export function FloatingMessenger({
         }),
       });
 
-      if (!res.ok) {
-        const errData = await res.json();
-        alert("Lỗi gửi tin nhắn: " + (errData.error || res.statusText));
-        setMessages((prev) => prev.filter((m) => m.id !== tempId));
-        return;
+      if (res.ok) {
+        const savedMsg = await res.json();
+        setMessages((prev) =>
+          prev.map((m) => (m.id === tempId ? savedMsg : m))
+        );
+      } else {
+        const err = await res.json();
+        console.error("Lỗi gửi tin nhắn:", err);
       }
-
-      const savedMsg = await res.json();
-      // Thay thế ID tạm bằng ID thật từ Database
-      setMessages((prev) =>
-        prev.map((m) => (m.id === tempId ? savedMsg : m))
-      );
-    } catch (err: any) {
-      console.error("Lỗi kết nối:", err);
-      alert("Lỗi kết nối: " + err.message);
-      setMessages((prev) => prev.filter((m) => m.id !== tempId));
+    } catch (err) {
+      console.error("Lỗi mạng:", err);
     }
   };
 
+  const onlinePeers = peers.filter((p) => p.isOnline);
+  const offlinePeers = peers.filter((p) => !p.isOnline);
+
   return (
     <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end">
-      {/* Khung Chatbox Messenger */}
       {isOpen && (
-        <div className="mb-3 flex h-[460px] w-80 sm:w-96 flex-col overflow-hidden rounded-3xl border border-[#96AFEB]/20 bg-[#111A2E] shadow-2xl backdrop-blur-xl animate-in fade-in slide-in-from-bottom-5">
+        <div className="mb-3 flex h-[480px] w-80 sm:w-96 flex-col overflow-hidden rounded-3xl border border-[#96AFEB]/20 bg-[#111A2E] shadow-2xl backdrop-blur-xl animate-in fade-in slide-in-from-bottom-5">
           {/* Header */}
           <div className="flex items-center justify-between border-b border-[#96AFEB]/15 bg-[#0D1424] px-4 py-3">
             <div className="flex items-center gap-2">
@@ -172,13 +162,28 @@ export function FloatingMessenger({
                 </button>
               )}
               <span className="relative flex h-2.5 w-2.5">
-                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
+                <span
+                  className={`relative inline-flex h-2.5 w-2.5 rounded-full ${
+                    selectedPeer
+                      ? selectedPeer.isOnline
+                        ? "bg-emerald-500"
+                        : "bg-slate-500"
+                      : "bg-blue-500"
+                  }`}
+                />
               </span>
-              <h4 className="text-xs font-bold text-white">
-                {selectedPeer
-                  ? selectedPeer.displayName || selectedPeer.username || "Bạn học"
-                  : "Messenger Bạn Học"}
-              </h4>
+              <div>
+                <h4 className="text-xs font-bold text-white leading-tight">
+                  {selectedPeer
+                    ? selectedPeer.displayName || selectedPeer.username
+                    : "Messenger Bạn Học"}
+                </h4>
+                {selectedPeer && (
+                  <p className="text-[10px] text-[#8390AF]">
+                    {selectedPeer.isOnline ? "Đang trực tuyến" : "Ngoại tuyến (nhận tin nhắn chờ)"}
+                  </p>
+                )}
+              </div>
             </div>
             <button
               type="button"
@@ -191,52 +196,46 @@ export function FloatingMessenger({
 
           {/* Body */}
           {!selectedPeer ? (
-            <div className="flex-1 overflow-y-auto p-3 space-y-2">
-              <p className="px-2 text-[11px] font-semibold uppercase tracking-wider text-[#8390AF]">
-                Đang trực tuyến ({activePeers.length})
-              </p>
-              {activePeers.length === 0 ? (
-                <div className="py-16 text-center text-xs text-[#8390AF]">
-                  Chưa có bạn học nào khác trực tuyến lúc này.
+            <div className="flex-1 overflow-y-auto p-3 space-y-3 scrollbar-thin scrollbar-thumb-neutral-800">
+              {peers.length === 0 ? (
+                <div className="py-20 text-center text-xs text-[#8390AF]">
+                  Chưa có bạn học nào trong hệ thống.
                 </div>
               ) : (
-                activePeers.map((peer) => {
-                  const peerName = peer.displayName || peer.username || "Học viên";
-                  const initialLetter = peerName.charAt(0).toUpperCase();
+                <>
+                  {/* Danh sách Online */}
+                  {onlinePeers.length > 0 && (
+                    <div className="space-y-1">
+                      <p className="px-2 text-[10px] font-bold uppercase tracking-wider text-emerald-400">
+                        Đang trực tuyến ({onlinePeers.length})
+                      </p>
+                      {onlinePeers.map((peer) => (
+                        <PeerRow key={peer.id} peer={peer} onSelect={() => setSelectedPeer(peer)} />
+                      ))}
+                    </div>
+                  )}
 
-                  return (
-                    <button
-                      key={peer.id}
-                      type="button"
-                      onClick={() => setSelectedPeer(peer)}
-                      className="flex w-full items-center gap-3 rounded-2xl p-2 hover:bg-[#172137] transition text-left"
-                    >
-                      {peer.avatarUrl ? (
-                        <img
-                          src={peer.avatarUrl}
-                          className="h-9 w-9 rounded-full object-cover"
-                          alt=""
-                        />
-                      ) : (
-                        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 font-bold text-white text-xs">
-                          {initialLetter}
-                        </div>
-                      )}
-                      <div className="min-w-0">
-                        <p className="truncate text-xs font-semibold text-white">{peerName}</p>
-                        <p className="truncate text-[10px] text-emerald-400">Đang trong phiên học</p>
-                      </div>
-                    </button>
-                  );
-                })
+                  {/* Danh sách Offline */}
+                  {offlinePeers.length > 0 && (
+                    <div className="space-y-1 pt-2">
+                      <p className="px-2 text-[10px] font-bold uppercase tracking-wider text-[#8390AF]">
+                        Ngoại tuyến ({offlinePeers.length})
+                      </p>
+                      {offlinePeers.map((peer) => (
+                        <PeerRow key={peer.id} peer={peer} onSelect={() => setSelectedPeer(peer)} />
+                      ))}
+                    </div>
+                  )}
+                </>
               )}
             </div>
           ) : (
+            // Khung trò chuyện 1-1
             <div className="flex flex-1 flex-col overflow-hidden">
               <div className="flex-1 overflow-y-auto p-3 space-y-2.5 scrollbar-thin scrollbar-thumb-neutral-800">
                 {messages.length === 0 ? (
                   <div className="py-16 text-center text-xs text-[#8390AF]">
-                    Hãy bắt đầu cuộc trò chuyện với {selectedPeer.displayName || selectedPeer.username}!
+                    Chưa có tin nhắn. Hãy gửi tin nhắn cho {selectedPeer.displayName || selectedPeer.username}!
                   </div>
                 ) : (
                   messages.map((m) => {
@@ -247,7 +246,7 @@ export function FloatingMessenger({
                         className={`flex ${isMe ? "justify-end" : "justify-start"}`}
                       >
                         <div
-                          className={`max-w-[75%] rounded-2xl px-3.5 py-2 text-xs leading-relaxed ${
+                          className={`max-w-[75%] rounded-2xl px-3.5 py-2 text-xs leading-relaxed break-words ${
                             isMe
                               ? "bg-blue-600 text-white rounded-br-none"
                               : "bg-[#1A253F] text-[#EAF0FB] border border-[#96AFEB]/15 rounded-bl-none"
@@ -276,7 +275,7 @@ export function FloatingMessenger({
                 />
                 <button
                   type="submit"
-                  className="rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-500 transition"
+                  className="rounded-xl bg-blue-600 px-3.5 py-2 text-xs font-bold text-white hover:bg-blue-500 transition"
                 >
                   Gửi
                 </button>
@@ -286,7 +285,7 @@ export function FloatingMessenger({
         </div>
       )}
 
-      {/* Nút tròn Messenger */}
+      {/* Nút tròn nổi Messenger */}
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
@@ -298,5 +297,44 @@ export function FloatingMessenger({
         </svg>
       </button>
     </div>
+  );
+}
+
+// Component từng dòng tài khoản bạn học
+function PeerRow({ peer, onSelect }: { peer: Peer; onSelect: () => void }) {
+  const name = peer.displayName || peer.username || "Học viên";
+  const initial = name.charAt(0).toUpperCase();
+
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className="flex w-full items-center gap-3 rounded-2xl p-2 hover:bg-[#172137] transition text-left"
+    >
+      <div className="relative flex-shrink-0">
+        {peer.avatarUrl ? (
+          <img src={peer.avatarUrl} className="h-9 w-9 rounded-full object-cover" alt="" />
+        ) : (
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 font-bold text-white text-xs">
+            {initial}
+          </div>
+        )}
+        <span
+          className={`absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full ring-2 ring-[#111A2E] ${
+            peer.isOnline ? "bg-emerald-500" : "bg-slate-500"
+          }`}
+        />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-xs font-semibold text-white">{name}</p>
+        <p className="truncate text-[10px] text-[#8390AF]">
+          {peer.isOnline ? (
+            <span className="text-emerald-400">Đang trực tuyến</span>
+          ) : (
+            "Ngoại tuyến"
+          )}
+        </p>
+      </div>
+    </button>
   );
 }
