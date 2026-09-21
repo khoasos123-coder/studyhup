@@ -1,46 +1,32 @@
-import type { Metadata } from 'next';
-import { redirect } from 'next/navigation';
-import { auth } from '@/auth';
-import { prisma } from '@/lib/prisma';
-import { FocusStudyDashboard } from '@/components/study/focus-study-dashboard';
-
-export const metadata: Metadata = {
-  title: 'Focus Study | StudyHup',
-};
+import { auth } from "@/auth";
+import { redirect } from "next/navigation";
+import { prisma } from "@/lib/prisma";
+import { FocusStudyDashboard } from "@/components/study/focus-study-dashboard";
 
 export default async function FocusPage() {
   const session = await auth();
-
-  // Nếu chưa đăng nhập, đá về trang login (Middleware cũng đã chặn, nhưng để chắc chắn)
   if (!session?.user?.id) {
-    redirect('/login');
+    redirect("/login");
   }
 
-  // Lấy dữ liệu thật từ Database
-  const user = await prisma.user.findUnique({
+  // Luôn đọc dữ liệu mới nhất từ Database khi F5
+  const dbUser = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: {
-      id: true,
-      username: true,
-      displayName: true,
-      totalHours: true,
-      // Tạm thời tính giờ học hôm nay = 0, sau này sẽ query bảng StudySession
-    }
   });
 
-  if (!user) {
-    redirect('/login');
+  if (!dbUser) {
+    redirect("/login");
   }
 
-  // Giả lập số giây đã học hôm nay (sau này sẽ query thật)
-  const secondsStudiedToday = 0; 
+  const initialUser = {
+    id: dbUser.id,
+    username: dbUser.username,
+    displayName: dbUser.displayName || dbUser.name || dbUser.username,
+    totalHours: dbUser.totalHours || 0,
+    secondsStudiedToday: 0,
+    avatarUrl: dbUser.avatarUrl || dbUser.image || null,
+    isStudent: dbUser.isStudent ?? true,
+  };
 
-  return (
-    <FocusStudyDashboard 
-      user={{
-        ...user,
-        secondsStudiedToday
-      }} 
-    />
-  );
+  return <FocusStudyDashboard user={initialUser} />;
 }
