@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { signOut } from 'next-auth/react';
 import { useMediaCapture, CaptureMode } from '@/hooks/use-media-capture';
 import { useStudySession, StudySessionEvent } from '@/hooks/use-study-session';
+import { LivePeersModal } from '@/components/study/live-peers-modal';
 
 /* =========================================================
    CẤU HÌNH BẬC RANK & HỆ THỐNG HUY HIỆU LỤC GIÁC
@@ -237,6 +238,7 @@ export function FocusStudyDashboard({ user: initialUser }: { user: UserProps }) 
 
   // Modals
   const [isLeaderboardOpen, setIsLeaderboardOpen] = React.useState(false);
+  const [isLivePeersOpen, setIsLivePeersOpen] = React.useState(false);
   const [leaderboard, setLeaderboard] = React.useState<LeaderboardUser[]>([]);
   const [isLoadingLeaderboard, setIsLoadingLeaderboard] = React.useState(false);
 
@@ -639,6 +641,17 @@ export function FocusStudyDashboard({ user: initialUser }: { user: UserProps }) 
           </div>
 
           <div className="flex items-center gap-3">
+            {/* Nút xem học viên trực tuyến */}
+            <button
+              type="button"
+              onClick={() => setIsLivePeersOpen(true)}
+              className="px-3 py-1.5 bg-emerald-950/40 hover:bg-emerald-900/50 border border-emerald-500/30 text-emerald-300 hover:text-white rounded-xl text-xs font-semibold transition flex items-center gap-2 shadow-sm"
+            >
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span>Phòng Học Trực Tuyến</span>
+            </button>
+
+            {/* Nút Bảng Xếp Hạng */}
             <button
               onClick={() => {
                 loadLeaderboard();
@@ -1093,6 +1106,13 @@ export function FocusStudyDashboard({ user: initialUser }: { user: UserProps }) 
           </div>
         </div>
       )}
+
+      {/* ===================== MODAL PHÒNG HỌC TRỰC TUYẾN ===================== */}
+      <LivePeersModal
+        isOpen={isLivePeersOpen}
+        onClose={() => setIsLivePeersOpen(false)}
+        currentUserId={currentUser.id}
+      />
 
       {/* ===================== MODAL CÀI ĐẶT HỒ SƠ ===================== */}
       {isProfileOpen && (
