@@ -1,0 +1,178 @@
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Tier {
+  FREE
+  PRO
+}
+
+enum Rank {
+  UNRANKED
+  BRONZE
+  SILVER
+  GOLD
+  PLATINUM
+  DIAMOND
+  MASTER
+  GRANDMASTER
+  CHALLENGER
+}
+
+enum SessionStatus {
+  RUNNING
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
+enum VerifyMode {
+  WEBCAM
+  SCREEN_SHARE
+}
+
+enum PauseReason {
+  MANUAL
+  SYSTEM_TIMEOUT
+  NO_FACE_DETECTED
+  TAB_HIDDEN
+}
+
+model User {
+  id                 String                @id @default(cuid())
+  email              String?               @unique
+  username           String                @unique
+  displayName        String                @map("display_name")
+  password           String?
+  avatarUrl          String?               @map("avatar_url")
+  tier               Tier                  @default(FREE)
+  proExpiresAt       DateTime?             @map("pro_expires_at")
+  isStudent          Boolean               @default(false) @map("is_student")
+  currentRank        Rank                  @default(UNRANKED) @map("current_rank")
+  totalHours         Float                 @default(0) @map("total_hours")
+  weeklyHours        Float                 @default(0) @map("weekly_hours")
+  isBanned           Boolean               @default(false) @map("is_banned")
+  streakCount        Int                   @default(0) @map("streak_count")
+  lastStudyDate      DateTime?             @map("last_study_date")
+  lastDecayAt        DateTime?             @map("last_decay_at")
+  decayShieldUntil   DateTime?             @map("decay_shield_until")
+  createdAt          DateTime              @default(now()) @map("created_at")
+  updatedAt          DateTime              @updatedAt @map("updated_at")
+
+  studySessions      StudySession[]
+  leaderboardEntries LeaderboardSnapshot[]
+
+  accounts           Account[]
+  sessions           Session[]
+
+  @@index([totalHours(sort: Desc)])
+  @@index([currentRank])
+  @@index([tier, proExpiresAt])
+  @@map("users")
+}
+
+model StudySession {
+  id              String            @id @default(cuid())
+  userId          String            @map("user_id")
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  startTime       DateTime          @default(now()) @map("start_time")
+  endTime         DateTime?         @map("end_time")
+  durationMinutes Int?              @map("duration_minutes")
+  status          SessionStatus     @default(RUNNING)
+  verifyMode      VerifyMode        @map("verify_mode")
+  subjectTag      String?           @map("subject_tag")
+  lastHeartbeatAt DateTime?         @map("last_heartbeat_at")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+
+  snapshots       SessionSnapshot[]
+  pauses          SessionPause[]
+
+  @@index([userId, startTime])
+  @@index([status])
+  @@map("study_sessions")
+}
+
+model SessionSnapshot {
+  id               String       @id @default(cuid())
+  sessionId        String       @map("session_id")
+  session          StudySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  imageUrl         String       @map("image_url")
+  capturedAt       DateTime     @default(now()) @map("captured_at")
+  presenceVerified Boolean      @default(false) @map("presence_verified")
+  createdAt        DateTime     @default(now()) @map("created_at")
+
+  @@index([sessionId, capturedAt])
+  @@map("session_snapshots")
+}
+
+model SessionPause {
+  id              String       @id @default(cuid())
+  sessionId       String       @map("session_id")
+  session         StudySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  pausedAt        DateTime     @default(now()) @map("paused_at")
+  resumedAt       DateTime?    @map("resumed_at")
+  reason          PauseReason  @default(MANUAL)
+  durationSeconds Int?         @map("duration_seconds")
+
+  @@index([sessionId])
+  @@map("session_pauses")
+}
+
+model LeaderboardSnapshot {
+  id           String   @id @default(cuid())
+  userId       String   @map("user_id")
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rank         Rank
+  totalHours   Float    @map("total_hours")
+  position     Int
+  snapshotDate DateTime @default(now()) @map("snapshot_date")
+
+  @@index([snapshotDate, position])
+  @@map("leaderboard_snapshots")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String  @map("user_id")
+  type              String
+  provider          String
+  providerAccountId String  @map("provider_account_id")
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique @map("session_token")
+  userId       String   @map("user_id")
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
