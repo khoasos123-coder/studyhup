@@ -619,8 +619,8 @@ export function FocusStudyDashboard({ user: initialUser }: { user: UserProps }) 
 
       {/* ===================== KHU VỰC CHÍNH ===================== */}
       <main className="flex-1 flex flex-col h-full overflow-y-auto bg-[#0A0F1C]">
-        {/* Header trên cùng */}
-        <header className="h-16 border-b border-[#96AFEB]/15 px-6 flex items-center justify-between flex-shrink-0 bg-[#0A0F1C]/80 backdrop-blur-md sticky top-0 z-10">
+        {/* Header trên cùng - Nền đen đặc, z-index 40 để che phủ sạch sẽ khi cuộn */}
+        <header className="h-16 border-b border-[#96AFEB]/15 px-6 flex items-center justify-between flex-shrink-0 bg-[#0A0F1C] sticky top-0 z-40 shadow-lg">
           <div className="flex items-center gap-3">
             {!isSidebarOpen && (
               <button
