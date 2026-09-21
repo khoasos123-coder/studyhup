@@ -7,16 +7,14 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
+// Lấy danh sách tin nhắn
 export async function GET(req: NextRequest) {
   try {
     const session = await auth();
-    if (!session?.user?.id) {
-      return NextResponse.json([]);
-    }
-
     const { searchParams } = new URL(req.url);
     const roomId = searchParams.get("roomId");
     const receiverId = searchParams.get("receiverId");
+    const currentUserId = session?.user?.id || searchParams.get("currentUserId");
 
     let query = supabase
       .from("messages")
@@ -26,15 +24,18 @@ export async function GET(req: NextRequest) {
 
     if (roomId) {
       query = query.eq("room_id", roomId);
-    } else if (receiverId) {
-      query = query.or(
-        `and(sender_id.eq.${session.user.id},receiver_id.eq.${receiverId}),and(sender_id.eq.${receiverId},receiver_id.eq.${session.user.id})`
-      );
+    } else if (receiverId && currentUserId) {
+      // Dùng cú pháp .in() an toàn tuyệt đối, không lo lỗi cú pháp PostgREST
+      query = query
+        .in("sender_id", [currentUserId, receiverId])
+        .in("receiver_id", [currentUserId, receiverId]);
+    } else {
+      return NextResponse.json([]);
     }
 
     const { data, error } = await query;
     if (error) {
-      console.error("Lỗi Supabase Query:", error);
+      console.error("Lỗi Supabase GET:", error);
       return NextResponse.json([]);
     }
 
@@ -45,27 +46,33 @@ export async function GET(req: NextRequest) {
   }
 }
 
+// Lưu tin nhắn mới
 export async function POST(req: NextRequest) {
   try {
     const session = await auth();
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const body = await req.json();
+    const { content, receiverId, roomId, senderId, senderName, senderAvatar } = body;
+
+    // Lấy ID từ session hoặc từ client gửi kèm
+    const finalSenderId = session?.user?.id || senderId;
+    const finalSenderName = session?.user?.name || senderName || "Học viên";
+    const finalSenderAvatar = session?.user?.image || senderAvatar || null;
+
+    if (!finalSenderId) {
+      return NextResponse.json({ error: "Không xác định được danh tính người gửi" }, { status: 401 });
     }
 
-    const body = await req.json();
-    const { content, receiverId, roomId } = body;
-
     if (!content || !content.trim()) {
-      return NextResponse.json({ error: "Nội dung rỗng" }, { status: 400 });
+      return NextResponse.json({ error: "Nội dung tin nhắn trống" }, { status: 400 });
     }
 
     const { data, error } = await supabase
       .from("messages")
       .insert([
         {
-          sender_id: session.user.id,
-          sender_name: session.user.name || "Học viên",
-          sender_avatar: session.user.image || null,
+          sender_id: finalSenderId,
+          sender_name: finalSenderName,
+          sender_avatar: finalSenderAvatar,
           receiver_id: receiverId || null,
           room_id: roomId || (receiverId ? null : "study_room"),
           content: content.trim(),
@@ -74,7 +81,11 @@ export async function POST(req: NextRequest) {
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error("Lỗi Supabase Insert:", error);
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
     return NextResponse.json(data);
   } catch (error: any) {
     console.error("Lỗi POST messages:", error);
